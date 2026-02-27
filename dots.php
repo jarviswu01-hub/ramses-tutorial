@@ -1,4 +1,6 @@
 <?php
+error_reporting(0);
+ini_set('display_errors', 0);
 // Increase limits just in case
 ini_set('memory_limit', '256M');
 
