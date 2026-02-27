@@ -158,11 +158,11 @@ drawResultChart(detected); // Draw result chart
 function drawResultChart(detected) {
 const ctx = document.getElementById('resultChart').getContext('2d');
 const colors = timeSeriesData.map((_, i) => {
-if (anomalyIndices.includes(i) && detected.includes(i)) return // True positive
+if (anomalyIndices.includes(i) && detected.includes(i)) return '#00ff88';
              '#00ff88';
-if (!anomalyIndices.includes(i) && detected.includes(i)) return // False positive
+if (!anomalyIndices.includes(i) && detected.includes(i)) return '#ffa500';
              '#ffa500';
-if (anomalyIndices.includes(i) && !detected.includes(i)) return // False negative
+if (anomalyIndices.includes(i) && !detected.includes(i)) return '#ff6b6b';
              '#ff6b6b';
 return '#667eea';
 });
