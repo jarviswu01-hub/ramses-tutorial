@@ -140,26 +140,30 @@ if (!anomalyIndices.includes(i) && Math.random() < cap.noise) {
 detected.push(i);
 }
 }
-const truePositives = detected.filter(i => anomalyIndices.includes(i)).length;
-const falsePositives = detected.filter(i => !anomalyIndices.includes(i)).length;
-const falseNegatives = anomalyIndices.filter(i => !detected.includes(i)).length;
+const truePositives = detected.filter(i => anomalyIndices.includes(i)).length; // True positive
+const falsePositives = detected.filter(i => !anomalyIndices.includes(i)).length; // False positive
+const falseNegatives = anomalyIndices.filter(i => !detected.includes(i)).length; // False negative
 precision = truePositives / (truePositives + falsePositives) || 0;
 recall = truePositives / (truePositives + falseNegatives) || 0;
 f1 = 2 * precision * recall / (precision + recall) || 0;
-document.getElementById('resultContainer').style.display = 'block';
+document.getElementById('resultContainer').style.display = 'block'; // Display results
 document.getElementById('precision').textContent = (precision * 100).toFixed(1) + '%';
 document.getElementById('recall').textContent = (recall * 100).toFixed(1) + '%';
 document.getElementById('f1score').textContent = (f1 * 100).toFixed(1) + '%';
 document.getElementById('detected').textContent = detected.length + '/' + anomalyIndices.length;
 document.getElementById('explanation').innerHTML = '<strong>Result:</strong> ' + cap.desc + ' F1 Score: ' + (f1 * 100).toFixed(1) + '%';
-drawResultChart(detected);
+drawResultChart(detected); // Draw result chart
 }
+// Draw result chart
 function drawResultChart(detected) {
 const ctx = document.getElementById('resultChart').getContext('2d');
 const colors = timeSeriesData.map((_, i) => {
-if (anomalyIndices.includes(i) && detected.includes(i)) return '#00ff88';
-if (!anomalyIndices.includes(i) && detected.includes(i)) return '#ffa500';
-if (anomalyIndices.includes(i) && !detected.includes(i)) return '#ff6b6b';
+if (anomalyIndices.includes(i) && detected.includes(i)) return // True positive
+             '#00ff88';
+if (!anomalyIndices.includes(i) && detected.includes(i)) return // False positive
+             '#ffa500';
+if (anomalyIndices.includes(i) && !detected.includes(i)) return // False negative
+             '#ff6b6b';
 return '#667eea';
 });
 if (resultChart) resultChart.destroy();
@@ -183,6 +187,7 @@ plugins: { legend: { display: false } }
 }
 });
 }
+// Initialize
 generateData();
 </script>
 </body>
