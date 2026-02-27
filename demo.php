@@ -4,11 +4,11 @@
 </div>
 <div class="chart-container">
 <div class="chart-title">📈 Time-Series Data with Anomalies</div>
-<canvas id="timeSeriesChart"></canvas>
+<canvas id="timeSeriesChart" style="height: 300px;"></canvas>
 </div>
 <div class="chart-container" id="resultContainer" style="display:none;">
 <div class="chart-title">🎯 Detection Results</div>
-<canvas id="resultChart"></canvas>
+<canvas id="resultChart" style="height: 300px;"></canvas>
 <div class="results">
 <div class="result-card">
 <h4>Precision</h4>
@@ -111,6 +111,7 @@ fill: true
 options: {
 responsive: true,
 maintainAspectRatio: false,
+            height: 300,
 plugins: { legend: { display: false } },
 scales: {
 y: { title: { display: true, text: 'Value' }},
@@ -183,6 +184,7 @@ tension: 0.3
 options: {
 responsive: true,
 maintainAspectRatio: false,
+            height: 300,
 plugins: { legend: { display: false } }
 }
 });
