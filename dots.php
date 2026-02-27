@@ -1,4 +1,7 @@
 <?php
+// Increase upload limit for this script
+ini_set('upload_max_filesize', '10M');
+ini_set('post_max_size', '12M');
 // ────────────────────────────────────────────────
 // Photo → Unicode Braille Dots Art
 // (copy-paste friendly for messengers)
@@ -30,10 +33,6 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
         case 'image/webp':
             $img = @imagecreatefromwebp($imagePath);
             break;
-        case 'image/bmp':
-        case 'image/x-ms-bmp':
-            $img = @imagecreatefrombmp($imagePath);
-            break;
         default:
             return "Error: Unsupported image type: " . $mimeType;
     }
@@ -52,11 +51,8 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
     
     // Resize
     $resized = imagecreatetruecolor($newWidth, $newHeight);
-    
-    // Preserve transparency for PNG
     imagealphablending($resized, false);
     imagesavealpha($resized, true);
-    
     imagecopyresampled($resized, $img, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
     imagedestroy($img);
     
@@ -67,7 +63,6 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
         for ($x = 0; $x < $newWidth; $x += 2) {
             $code = 0;
             
-            // Braille dot positions (0-7)
             $dots = [
                 [$x, $y],         // 0
                 [$x, $y+1],       // 1
@@ -83,11 +78,8 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
                 if ($py >= $newHeight || $px >= $newWidth) continue;
                 
                 $rgb = imagecolorat($resized, $px, $py);
-                
-                // Handle transparency
                 $alpha = ($rgb >> 24) & 0x7F;
                 if ($alpha > 127) {
-                    // Transparent pixel - treat as white
                     $r = $g = $b = 255;
                 } else {
                     $r = ($rgb >> 16) & 0xFF;
@@ -95,7 +87,6 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
                     $b = $rgb & 0xFF;
                 }
                 
-                // Simple brightness (0–1)
                 $brightness = ($r * 0.299 + $g * 0.587 + $b * 0.114) / 255;
                 
                 if ($brightness < $threshold) {
@@ -103,7 +94,6 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
                 }
             }
             
-            // Braille characters start at U+2800
             $output .= mb_chr(0x2800 + $code, 'UTF-8');
         }
         $output .= "\n";
@@ -139,15 +129,8 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
             padding: 30px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
         }
-        h1 {
-            color: #667eea;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        form {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+        h1 { color: #667eea; text-align: center; margin-bottom: 30px; }
+        form { text-align: center; margin-bottom: 30px; }
         input[type="file"] {
             padding: 10px;
             border: 2px dashed #667eea;
@@ -164,9 +147,7 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
             font-weight: bold;
             font-size: 16px;
         }
-        button:hover {
-            transform: scale(1.05);
-        }
+        button:hover { transform: scale(1.05); }
         .result {
             background: #1a1a2e;
             color: #00ff88;
@@ -197,8 +178,23 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
         $result = "";
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            if (!isset($_FILES['photo']) || $_FILES['photo']['error'] !== UPLOAD_ERR_OK) {
-                $error = "Error: No file uploaded or upload error: " . ($_FILES['photo']['error'] ?? 'unknown');
+            $uploadErrorCodes = [
+                0 => 'Success',
+                1 => 'File exceeds upload_max_filesize (2MB limit)',
+                2 => 'File exceeds MAX_FILE_SIZE',
+                3 => 'File partially uploaded',
+                4 => 'No file uploaded',
+                6 => 'Missing temporary folder',
+                7 => 'Failed to write to disk',
+                8 => 'Upload stopped by extension'
+            ];
+            
+            if (!isset($_FILES['photo'])) {
+                $error = "Error: No file was selected";
+            } elseif ($_FILES['photo']['error'] !== UPLOAD_ERR_OK) {
+                $errCode = $_FILES['photo']['error'];
+                $errMsg = $uploadErrorCodes[$errCode] ?? "Unknown error ($errCode)";
+                $error = "Error: Upload failed - " . $errMsg;
             } else {
                 $tmp = $_FILES['photo']['tmp_name'];
                 $result = imageToBrailleDots($tmp, 80, 0.5);
