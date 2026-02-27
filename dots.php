@@ -8,25 +8,38 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
         return "Error: Image not found at path: " . $imagePath;
     }
     
-    // Get extension
-    $ext = strtolower(pathinfo($imagePath, PATHINFO_EXTENSION));
+    $fileInfo = getimagesize($imagePath);
+    if ($fileInfo === false) {
+        return "Error: Not a valid image file";
+    }
     
-    // Load image based on extension
+    $mimeType = $fileInfo['mime'];
     $img = false;
-    if ($ext === 'jpg' || $ext === 'jpeg') {
-        $img = @imagecreatefromjpeg($imagePath);
-    } elseif ($ext === 'png') {
-        $img = @imagecreatefrompng($imagePath);
-    } elseif ($ext === 'gif') {
-        $img = @imagecreatefromgif($imagePath);
-    } elseif ($ext === 'wbmp') {
-        $img = @imagecreatefromwbmp($imagePath);
-    } elseif ($ext === 'webp') {
-        $img = @imagecreatefromwebp($imagePath);
+    
+    // Load image based on MIME type
+    switch ($mimeType) {
+        case 'image/jpeg':
+            $img = @imagecreatefromjpeg($imagePath);
+            break;
+        case 'image/png':
+            $img = @imagecreatefrompng($imagePath);
+            break;
+        case 'image/gif':
+            $img = @imagecreatefromgif($imagePath);
+            break;
+        case 'image/webp':
+            $img = @imagecreatefromwebp($imagePath);
+            break;
+        case 'image/bmp':
+        case 'image/x-ms-bmp':
+            $img = @imagecreatefrombmp($imagePath);
+            break;
+        default:
+            return "Error: Unsupported image type: " . $mimeType;
     }
     
     if (!$img) {
-        return "Error: Unsupported or corrupted image. Extension: " . $ext;
+        return "Error: Failed to create image resource from file";
     }
     
     // Get dimensions
@@ -39,6 +52,11 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
     
     // Resize
     $resized = imagecreatetruecolor($newWidth, $newHeight);
+    
+    // Preserve transparency for PNG
+    imagealphablending($resized, false);
+    imagesavealpha($resized, true);
+    
     imagecopyresampled($resized, $img, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
     imagedestroy($img);
     
@@ -65,9 +83,17 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
                 if ($py >= $newHeight || $px >= $newWidth) continue;
                 
                 $rgb = imagecolorat($resized, $px, $py);
-                $r = ($rgb >> 16) & 0xFF;
-                $g = ($rgb >> 8) & 0xFF;
-                $b = $rgb & 0xFF;
+                
+                // Handle transparency
+                $alpha = ($rgb >> 24) & 0x7F;
+                if ($alpha > 127) {
+                    // Transparent pixel - treat as white
+                    $r = $g = $b = 255;
+                } else {
+                    $r = ($rgb >> 16) & 0xFF;
+                    $g = ($rgb >> 8) & 0xFF;
+                    $b = $rgb & 0xFF;
+                }
                 
                 // Simple brightness (0–1)
                 $brightness = ($r * 0.299 + $g * 0.587 + $b * 0.114) / 255;
@@ -170,11 +196,13 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
         $error = "";
         $result = "";
         
-        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
-            $tmp = $_FILES['photo']['tmp_name'];
-            $result = imageToBrailleDots($tmp, 80, 0.5);
-        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $error = "Error: No file uploaded or upload error code: " . ($_FILES['photo']['error'] ?? 'no file');
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            if (!isset($_FILES['photo']) || $_FILES['photo']['error'] !== UPLOAD_ERR_OK) {
+                $error = "Error: No file uploaded or upload error: " . ($_FILES['photo']['error'] ?? 'unknown');
+            } else {
+                $tmp = $_FILES['photo']['tmp_name'];
+                $result = imageToBrailleDots($tmp, 80, 0.5);
+            }
         }
         ?>
         
@@ -182,14 +210,18 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
             <div class="error"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
         
-        <?php if (!empty($result)): ?>
+        <?php if (!empty($result) && strpos($result, 'Error:') === 0): ?>
+            <div class="error"><?= htmlspecialchars($result) ?></div>
+        <?php elseif (!empty($result)): ?>
             <div class="result"><?= htmlspecialchars($result) ?></div>
         <?php endif; ?>
         
         <form method="post" enctype="multipart/form-data">
-            <input type="file" name="photo" accept="image/*" required>
+            <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp" required>
             <button type="submit">Convert to dots</button>
         </form>
+        
+        <p style="text-align: center; color: #666;">Supported: JPG, PNG, GIF, WebP</p>
     </div>
 </body>
 </html>
