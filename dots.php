@@ -5,19 +5,28 @@
 // ────────────────────────────────────────────────
 function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $threshold = 0.5): string {
     if (!file_exists($imagePath)) {
-        return "Error: Image not found.";
+        return "Error: Image not found at path: " . $imagePath;
     }
     
-    // Load image
+    // Get extension
     $ext = strtolower(pathinfo($imagePath, PATHINFO_EXTENSION));
-    $img = match ($ext) {
-        'jpg', 'jpeg' => imagecreatefromjpeg($imagePath),
-        'png' => imagecreatefrompng($imagePath),
-        default => false
-    };
+    
+    // Load image based on extension
+    $img = false;
+    if ($ext === 'jpg' || $ext === 'jpeg') {
+        $img = @imagecreatefromjpeg($imagePath);
+    } elseif ($ext === 'png') {
+        $img = @imagecreatefrompng($imagePath);
+    } elseif ($ext === 'gif') {
+        $img = @imagecreatefromgif($imagePath);
+    } elseif ($ext === 'wbmp') {
+        $img = @imagecreatefromwbmp($imagePath);
+    } elseif ($ext === 'webp') {
+        $img = @imagecreatefromwebp($imagePath);
+    }
     
     if (!$img) {
-        return "Error: Unsupported or corrupted image.";
+        return "Error: Unsupported or corrupted image. Extension: " . $ext;
     }
     
     // Get dimensions
@@ -28,9 +37,9 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
     $newWidth = min($maxWidth, $width);
     $newHeight = (int) round($height * $newWidth / $width);
     
-    // Resize (we use fast resampling)
+    // Resize
     $resized = imagecreatetruecolor($newWidth, $newHeight);
-    imagecopyresampled($resized, $img, 0,0,0,0, $newWidth,$newHeight, $width,$height);
+    imagecopyresampled($resized, $img, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
     imagedestroy($img);
     
     $output = "";
@@ -41,11 +50,6 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
             $code = 0;
             
             // Braille dot positions (0-7)
-            // 0 3
-            // 1 4
-            // 2 5
-            // 6 7 ← bottom row
-            
             $dots = [
                 [$x, $y],         // 0
                 [$x, $y+1],       // 1
@@ -57,7 +61,7 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
                 [$x+1, $y+3],     // 7
             ];
             
-            foreach ($dots as $i => [$px, $py]) {
+            foreach ($dots as $i => list($px, $py)) {
                 if ($py >= $newHeight || $px >= $newWidth) continue;
                 
                 $rgb = imagecolorat($resized, $px, $py);
@@ -149,22 +153,41 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
             line-height: 1;
             text-align: center;
         }
+        .error {
+            background: #ff4444;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📷 Photo → Braille Dots</h1>
         
-        <?php if ($_FILES['photo'] ?? false): ?>
-            <?php 
+        <?php 
+        $error = "";
+        $result = "";
+        
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
             $tmp = $_FILES['photo']['tmp_name'];
             $result = imageToBrailleDots($tmp, 80, 0.5);
-            ?>
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $error = "Error: No file uploaded or upload error code: " . ($_FILES['photo']['error'] ?? 'no file');
+        }
+        ?>
+        
+        <?php if (!empty($error)): ?>
+            <div class="error"><?= htmlspecialchars($error) ?></div>
+        <?php endif; ?>
+        
+        <?php if (!empty($result)): ?>
             <div class="result"><?= htmlspecialchars($result) ?></div>
         <?php endif; ?>
         
         <form method="post" enctype="multipart/form-data">
-            <input type="file" name="photo" accept="image/*">
+            <input type="file" name="photo" accept="image/*" required>
             <button type="submit">Convert to dots</button>
         </form>
     </div>
