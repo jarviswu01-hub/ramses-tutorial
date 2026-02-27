@@ -1,102 +1,145 @@
 <?php
-// Increase upload limit for this script
-ini_set('upload_max_filesize', '10M');
-ini_set('post_max_size', '12M');
+// Increase limits just in case
+ini_set('memory_limit', '256M');
 
-// Photo → Unicode Braille Dots Art
+// ────────────────────────────────────────────────
+// Text → Unicode Braille Dots Art
+// ────────────────────────────────────────────────
+function textToBrailleDots(string $text, int $fontSize = 12): string {
+    if (empty(trim($text))) {
+        return "";
+    }
 
-function imageToBrailleDots(string $imagePath, int $maxWidth = 100, float $threshold = 0.5): string {
-    if (!file_exists($imagePath)) {
-        return "Error: Image not found at path: " . $imagePath;
+    // Path to a font that supports Chinese (Arial Unicode on macOS)
+    $fontPath = '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
+    if (!file_exists($fontPath)) {
+        $fontPath = '/System/Library/Fonts/Arial Unicode.ttf';
     }
-    
-    $fileInfo = getimagesize($imagePath);
-    if ($fileInfo === false) {
-        return "Error: Not a valid image file";
+    if (!file_exists($fontPath)) {
+        // Fallback
+        $fontPath = '/System/Library/Fonts/Helvetica.ttc';
     }
-    
-    $mimeType = $fileInfo['mime'];
-    $img = false;
-    
-    switch ($mimeType) {
-        case 'image/jpeg':
-            $img = @imagecreatefromjpeg($imagePath);
-            break;
-        case 'image/png':
-            $img = @imagecreatefrompng($imagePath);
-            break;
-        case 'image/gif':
-            $img = @imagecreatefromgif($imagePath);
-            break;
-        case 'image/webp':
-            $img = @imagecreatefromwebp($imagePath);
-            break;
-        default:
-            return "Error: Unsupported image type: " . $mimeType;
+
+    $angle = 0;
+
+    // Process text: Wrap every 4 characters
+    $originalLines = explode("\n", $text);
+    $lines = [];
+
+    foreach ($originalLines as $originalLine) {
+        // clean up
+        $originalLine = str_replace(["\r", "\t"], ["", " "], $originalLine);
+        if ($originalLine === "") {
+            $lines[] = "";
+            $lines[] = ""; // Add extra spacing for empty lines too
+        } else {
+            // Split into chunks of 4 characters (multibyte safe)
+            $length = mb_strlen($originalLine);
+            for ($i = 0; $i < $length; $i += 4) {
+                $lines[] = mb_substr($originalLine, $i, 4);
+                $lines[] = ""; // Add empty line after every chunk
+            }
+        }
     }
-    
-    if (!$img) {
-        return "Error: Failed to create image resource from file";
+
+    // Calculate dimensions
+    $maxWidth = 0;
+    $lineHeight = $fontSize * 1.1;
+
+    foreach ($lines as $line) {
+        $line = str_replace("\t", " ", $line);
+        $bbox = imagettfbbox($fontSize, $angle, $fontPath, $line);
+        if ($bbox) {
+            $width = abs($bbox[2] - $bbox[0]);
+            $maxWidth = max($maxWidth, $width);
+        }
     }
-    
-    $width = imagesx($img);
-    $height = imagesy($img);
-    
-    $newWidth = min($maxWidth, $width);
-    $newHeight = (int) round($height * $newWidth / $width);
-    
-    $resized = imagecreatetruecolor($newWidth, $newHeight);
-    imagealphablending($resized, false);
-    imagesavealpha($resized, true);
-    $white = imagecolorallocate($resized, 255, 255, 255);
-    imagefill($resized, 0, 0, $white);
-    imagecopyresampled($resized, $img, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-    imagedestroy($img);
-    
-    // Convert to grayscale with contrast boost
-    $gray = imagecreatetruecolor($newWidth, $newHeight);
-    imagecopy($gray, $resized, 0, 0, 0, 0, $newWidth, $newHeight);
-    imagefilter($gray, IMG_FILTER_GRAYSCALE);
-    imagefilter($gray, IMG_FILTER_CONTRAST, 30);
-    
+
+    $totalHeight = count($lines) * $lineHeight;
+    if ($maxWidth === 0) $maxWidth = 100;
+
+    // Add padding
+    $padding = 2;
+    $width = $maxWidth + ($padding * 2);
+    $height = $totalHeight + ($padding * 2);
+
+    // Create canvas
+    $img = imagecreatetruecolor((int)$width, (int)$height);
+    $black = imagecolorallocate($img, 0, 0, 0);
+    $white = imagecolorallocate($img, 255, 255, 255);
+
+    // Fill background black
+    imagefill($img, 0, 0, $black);
+
+    // Write text in white
+    $y = $padding + $fontSize;
+    foreach ($lines as $line) {
+        $line = str_replace("\t", " ", $line);
+        imagettftext($img, $fontSize, $angle, $padding, $y, $white, $fontPath, $line);
+        $y += $lineHeight;
+    }
+
     $output = "";
-    
-    for ($y = 0; $y < $newHeight; $y += 4) {
-        for ($x = 0; $x < $newWidth; $x += 2) {
+
+    // Convert to Braille (2x4 blocks)
+    for ($y = 0; $y < $height; $y += 4) {
+        $rowString = "";
+        for ($x = 0; $x < $width; $x += 2) {
             $code = 0;
-            
+
+            // Braille Dot Mapping
+            // 1 (0,0) 4 (1,0)
+            // 2 (0,1) 5 (1,1)
+            // 3 (0,2) 6 (1,2)
+            // 7 (0,3) 8 (1,3)
             $dots = [
-                [$x, $y],
-                [$x, $y+1],
-                [$x, $y+2],
-                [$x+1, $y],
-                [$x+1, $y+1],
-                [$x+1, $y+2],
-                [$x, $y+3],
-                [$x+1, $y+3],
+                0 => [$x, $y],
+                1 => [$x, $y+1],
+                2 => [$x, $y+2],
+                3 => [$x+1, $y],
+                4 => [$x+1, $y+1],
+                5 => [$x+1, $y+2],
+                6 => [$x, $y+3],
+                7 => [$x+1, $y+3]
             ];
-            
-            foreach ($dots as $i => list($px, $py)) {
-                if ($py >= $newHeight || $px >= $newWidth) continue;
-                
-                $rgb = imagecolorat($gray, $px, $py);
-                $grayVal = $rgb & 0xFF;
-                $brightness = $grayVal / 255;
-                
-                if ($brightness < $threshold) {
-                    $code |= (1 << $i);
+
+            foreach ($dots as $bit => $pos) {
+                $px = $pos[0];
+                $py = $pos[1];
+                if ($px < $width && $py < $height) {
+                    $rgb = imagecolorat($img, $px, $py);
+                    $r = ($rgb >> 16) & 0xFF;
+                    $g = ($rgb >> 8) & 0xFF;
+                    $b = $rgb & 0xFF;
+                    $brightness = ($r * 0.299 + $g * 0.587 + $b * 0.114) / 255;
+                    if ($brightness > 0.5) {
+                        $code |= (1 << $bit);
+                    }
                 }
             }
-            
+
+            // Braille characters start at U+2800
             $output .= mb_chr(0x2800 + $code, 'UTF-8');
         }
         $output .= "\n";
     }
-    
-    imagedestroy($resized);
-    imagedestroy($gray);
-    
+
+    imagedestroy($img);
     return rtrim($output, "\n");
+}
+
+// Handle form submission
+$resultDots = "";
+$defaultText = "Hello\nWorld\n你好";
+$selectedSize = 12;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $text = $_POST['text'] ?? '';
+    $selectedSize = isset($_POST['size']) ? (int)$_POST['size'] : 12;
+    if (!empty(trim($text))) {
+        $resultDots = textToBrailleDots($text, $selectedSize);
+        $defaultText = $text;
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -104,61 +147,161 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 100, float $thres
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photo to Braille Dots</title>
+    <title>Text to Braille Dots</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; padding: 20px; margin: 0; }
-        .container { max-width: 900px; margin: 0 auto; background: white; border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-        h1 { color: #667eea; text-align: center; margin-bottom: 20px; }
-        .controls { background: #f5f7fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
-        .control-group { margin-bottom: 15px; }
-        .control-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .control-group input[type="range"] { width: 100%; }
-        form { text-align: center; margin-bottom: 20px; }
-        input[type="file"] { padding: 10px; border: 2px dashed #667eea; border-radius: 10px; margin-right: 10px; }
-        button { background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 12px 30px; border-radius: 25px; cursor: pointer; font-weight: bold; font-size: 16px; }
-        button:hover { transform: scale(1.05); }
-        .result { background: #000; color: #fff; padding: 20px; border-radius: 10px; overflow-x: auto; white-space: pre; font-family: monospace; font-size: 6px; line-height: 0.6; text-align: center; }
-        .error { background: #ff4444; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            resize: vertical;
+            margin-bottom: 15px;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        select {
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+            font-size: 14px;
+            flex: 1;
+        }
+        .submit-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .result-container {
+            background: #0f0f1a;
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            position: relative;
+            margin-top: 20px;
+        }
+        .result {
+            color: #00ff88;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1;
+            white-space: pre;
+            overflow-x: auto;
+            text-align: left;
+            padding-top:30px; /* Space for copy button */
+        }
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #aaa;
+            padding: 5px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: rgba(255,255,255,0.4);
+            font-size: 0.8rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📷 Photo → Braille Dots</h1>
+        <h1>🔠 Text → Dots Art</h1>
         
-        <?php 
-        $error = "";
-        $result = "";
-        $width = isset($_POST['width']) ? (int)$_POST['width'] : 100;
-        $threshold = isset($_POST['threshold']) ? (int)$_POST['threshold'] : 50;
+        <form method="post">
+            <textarea name="text" placeholder="Type text here to convert to Braille dots..." required><?= htmlspecialchars($defaultText) ?></textarea>
+            
+            <div class="controls">
+                <select name="size">
+                    <option value="9" <?= $selectedSize == 9 ? 'selected' : '' ?>>Size: Tiny (9pt)</option>
+                    <option value="10" <?= $selectedSize == 10 ? 'selected' : '' ?>>Size: Extra Small (10pt)</option>
+                    <option value="12" <?= $selectedSize == 12 ? 'selected' : '' ?>>Size: Small (12pt)</option>
+                    <option value="18" <?= $selectedSize == 18 ? 'selected' : '' ?>>Size: Medium (18pt)</option>
+                    <option value="24" <?= $selectedSize == 24 ? 'selected' : '' ?>>Size: Large (24pt)</option>
+                    <option value="36" <?= $selectedSize == 36 ? 'selected' : '' ?>>Size: Huge (36pt)</option>
+                </select>
+                
+                <button type="submit" class="submit-btn">Convert to Dots</button>
+            </div>
+        </form>
         
-        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
-            $tmp = $_FILES['photo']['tmp_name'];
-            $result = imageToBrailleDots($tmp, $width, $threshold / 100);
-        }
-        ?>
-        
-        <div class="controls">
-            <form method="post" enctype="multipart/form-data">
-                <div class="control-group">
-                    <label>Width (Detail): <span id="widthVal"><?= $width ?></span></label>
-                    <input type="range" name="width" min="40" max="150" value="<?= $width ?>" oninput="document.getElementById('widthVal').textContent=this.value">
-                </div>
-                <div class="control-group">
-                    <label>Threshold (Darkness): <span id="threshVal"><?= $threshold ?>%</span></label>
-                    <input type="range" name="threshold" min="20" max="80" value="<?= $threshold ?>" oninput="document.getElementById('threshVal').textContent=this.value+'%'">
-                </div>
-                <input type="file" name="photo" accept="image/*" required>
-                <button type="submit">Convert to dots</button>
-            </form>
-        </div>
-        
-        <?php if (!empty($result)): ?>
-            <?php if (strpos($result, 'Error:') === 0): ?>
-                <div class="error"><?= htmlspecialchars($result) ?></div>
-            <?php else: ?>
-                <div class="result"><?= htmlspecialchars($result) ?></div>
-            <?php endif; ?>
+        <?php if (!empty($resultDots)): ?>
+            <div class="result-container">
+                <button class="copy-btn" onclick="copyToClipboard(this)">Copy to Clipboard</button>
+                <div class="result" id="brailleOutput"><?= $resultDots ?></div>
+            </div>
         <?php endif; ?>
+        
+        <div class="footer">
+            Generates copy-paste friendly Braille patterns from text input.
+        </div>
     </div>
+    
+    <script>
+        function copyToClipboard(btn) {
+            const text = document.getElementById('brailleOutput').innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = btn.innerText;
+                btn.innerText = 'Copied!';
+                btn.style.background = 'rgba(0, 255, 136, 0.2)';
+                btn.style.color = '#00ff88';
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.background = '';
+                    btn.style.color = '';
+                }, 2000);
+            });
+        }
+    </script>
 </body>
 </html>
