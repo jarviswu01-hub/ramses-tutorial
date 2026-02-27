@@ -2,11 +2,10 @@
 // Increase upload limit for this script
 ini_set('upload_max_filesize', '10M');
 ini_set('post_max_size', '12M');
-// ────────────────────────────────────────────────
+
 // Photo → Unicode Braille Dots Art
-// (copy-paste friendly for messengers)
-// ────────────────────────────────────────────────
-function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $threshold = 0.5): string {
+
+function imageToBrailleDots(string $imagePath, int $maxWidth = 100, float $threshold = 0.5): string {
     if (!file_exists($imagePath)) {
         return "Error: Image not found at path: " . $imagePath;
     }
@@ -19,7 +18,6 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
     $mimeType = $fileInfo['mime'];
     $img = false;
     
-    // Load image based on MIME type
     switch ($mimeType) {
         case 'image/jpeg':
             $img = @imagecreatefromjpeg($imagePath);
@@ -41,53 +39,49 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
         return "Error: Failed to create image resource from file";
     }
     
-    // Get dimensions
     $width = imagesx($img);
     $height = imagesy($img);
     
-    // Calculate new size (keep aspect ratio)
     $newWidth = min($maxWidth, $width);
     $newHeight = (int) round($height * $newWidth / $width);
     
-    // Resize
     $resized = imagecreatetruecolor($newWidth, $newHeight);
     imagealphablending($resized, false);
     imagesavealpha($resized, true);
+    $white = imagecolorallocate($resized, 255, 255, 255);
+    imagefill($resized, 0, 0, $white);
     imagecopyresampled($resized, $img, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
     imagedestroy($img);
     
+    // Convert to grayscale with contrast boost
+    $gray = imagecreatetruecolor($newWidth, $newHeight);
+    imagecopy($gray, $resized, 0, 0, 0, 0, $newWidth, $newHeight);
+    imagefilter($gray, IMG_FILTER_GRAYSCALE);
+    imagefilter($gray, IMG_FILTER_CONTRAST, 30);
+    
     $output = "";
     
-    // Each Braille char covers 2×4 pixels
     for ($y = 0; $y < $newHeight; $y += 4) {
         for ($x = 0; $x < $newWidth; $x += 2) {
             $code = 0;
             
             $dots = [
-                [$x, $y],         // 0
-                [$x, $y+1],       // 1
-                [$x, $y+2],       // 2
-                [$x+1, $y],       // 3
-                [$x+1, $y+1],     // 4
-                [$x+1, $y+2],     // 5
-                [$x, $y+3],       // 6
-                [$x+1, $y+3],     // 7
+                [$x, $y],
+                [$x, $y+1],
+                [$x, $y+2],
+                [$x+1, $y],
+                [$x+1, $y+1],
+                [$x+1, $y+2],
+                [$x, $y+3],
+                [$x+1, $y+3],
             ];
             
             foreach ($dots as $i => list($px, $py)) {
                 if ($py >= $newHeight || $px >= $newWidth) continue;
                 
-                $rgb = imagecolorat($resized, $px, $py);
-                $alpha = ($rgb >> 24) & 0x7F;
-                if ($alpha > 127) {
-                    $r = $g = $b = 255;
-                } else {
-                    $r = ($rgb >> 16) & 0xFF;
-                    $g = ($rgb >> 8) & 0xFF;
-                    $b = $rgb & 0xFF;
-                }
-                
-                $brightness = ($r * 0.299 + $g * 0.587 + $b * 0.114) / 255;
+                $rgb = imagecolorat($gray, $px, $py);
+                $grayVal = $rgb & 0xFF;
+                $brightness = $grayVal / 255;
                 
                 if ($brightness < $threshold) {
                     $code |= (1 << $i);
@@ -100,12 +94,10 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
     }
     
     imagedestroy($resized);
+    imagedestroy($gray);
+    
     return rtrim($output, "\n");
 }
-
-// ────────────────────────────────────────────────
-// Upload Form UI
-// ────────────────────────────────────────────────
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -114,59 +106,19 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Photo to Braille Dots</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            min-height: 100vh;
-            padding: 20px;
-            margin: 0;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        h1 { color: #667eea; text-align: center; margin-bottom: 30px; }
-        form { text-align: center; margin-bottom: 30px; }
-        input[type="file"] {
-            padding: 10px;
-            border: 2px dashed #667eea;
-            border-radius: 10px;
-            margin-right: 10px;
-        }
-        button {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 16px;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; padding: 20px; margin: 0; }
+        .container { max-width: 900px; margin: 0 auto; background: white; border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        h1 { color: #667eea; text-align: center; margin-bottom: 20px; }
+        .controls { background: #f5f7fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .control-group { margin-bottom: 15px; }
+        .control-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .control-group input[type="range"] { width: 100%; }
+        form { text-align: center; margin-bottom: 20px; }
+        input[type="file"] { padding: 10px; border: 2px dashed #667eea; border-radius: 10px; margin-right: 10px; }
+        button { background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 12px 30px; border-radius: 25px; cursor: pointer; font-weight: bold; font-size: 16px; }
         button:hover { transform: scale(1.05); }
-        .result {
-            background: #1a1a2e;
-            color: #00ff88;
-            padding: 20px;
-            border-radius: 10px;
-            overflow-x: auto;
-            white-space: pre;
-            font-family: monospace;
-            font-size: 10px;
-            line-height: 1;
-            text-align: center;
-        }
-        .error {
-            background: #ff4444;
-            color: white;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
+        .result { background: #000; color: #fff; padding: 20px; border-radius: 10px; overflow-x: auto; white-space: pre; font-family: monospace; font-size: 6px; line-height: 0.6; text-align: center; }
+        .error { background: #ff4444; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
     </style>
 </head>
 <body>
@@ -176,48 +128,37 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
         <?php 
         $error = "";
         $result = "";
+        $width = isset($_POST['width']) ? (int)$_POST['width'] : 100;
+        $threshold = isset($_POST['threshold']) ? (int)$_POST['threshold'] : 50;
         
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $uploadErrorCodes = [
-                0 => 'Success',
-                1 => 'File exceeds upload_max_filesize (2MB limit)',
-                2 => 'File exceeds MAX_FILE_SIZE',
-                3 => 'File partially uploaded',
-                4 => 'No file uploaded',
-                6 => 'Missing temporary folder',
-                7 => 'Failed to write to disk',
-                8 => 'Upload stopped by extension'
-            ];
-            
-            if (!isset($_FILES['photo'])) {
-                $error = "Error: No file was selected";
-            } elseif ($_FILES['photo']['error'] !== UPLOAD_ERR_OK) {
-                $errCode = $_FILES['photo']['error'];
-                $errMsg = $uploadErrorCodes[$errCode] ?? "Unknown error ($errCode)";
-                $error = "Error: Upload failed - " . $errMsg;
-            } else {
-                $tmp = $_FILES['photo']['tmp_name'];
-                $result = imageToBrailleDots($tmp, 80, 0.5);
-            }
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
+            $tmp = $_FILES['photo']['tmp_name'];
+            $result = imageToBrailleDots($tmp, $width, $threshold / 100);
         }
         ?>
         
-        <?php if (!empty($error)): ?>
-            <div class="error"><?= htmlspecialchars($error) ?></div>
+        <div class="controls">
+            <form method="post" enctype="multipart/form-data">
+                <div class="control-group">
+                    <label>Width (Detail): <span id="widthVal"><?= $width ?></span></label>
+                    <input type="range" name="width" min="40" max="150" value="<?= $width ?>" oninput="document.getElementById('widthVal').textContent=this.value">
+                </div>
+                <div class="control-group">
+                    <label>Threshold (Darkness): <span id="threshVal"><?= $threshold ?>%</span></label>
+                    <input type="range" name="threshold" min="20" max="80" value="<?= $threshold ?>" oninput="document.getElementById('threshVal').textContent=this.value+'%'">
+                </div>
+                <input type="file" name="photo" accept="image/*" required>
+                <button type="submit">Convert to dots</button>
+            </form>
+        </div>
+        
+        <?php if (!empty($result)): ?>
+            <?php if (strpos($result, 'Error:') === 0): ?>
+                <div class="error"><?= htmlspecialchars($result) ?></div>
+            <?php else: ?>
+                <div class="result"><?= htmlspecialchars($result) ?></div>
+            <?php endif; ?>
         <?php endif; ?>
-        
-        <?php if (!empty($result) && strpos($result, 'Error:') === 0): ?>
-            <div class="error"><?= htmlspecialchars($result) ?></div>
-        <?php elseif (!empty($result)): ?>
-            <div class="result"><?= htmlspecialchars($result) ?></div>
-        <?php endif; ?>
-        
-        <form method="post" enctype="multipart/form-data">
-            <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp" required>
-            <button type="submit">Convert to dots</button>
-        </form>
-        
-        <p style="text-align: center; color: #666;">Supported: JPG, PNG, GIF, WebP</p>
     </div>
 </body>
 </html>
