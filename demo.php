@@ -80,7 +80,7 @@ const numAnomalies = Math.floor(n * anomalyRatio);
 while (anomalyIndices.length < numAnomalies) {
 const idx = Math.floor(Math.random() * n);
 if (!anomalyIndices.includes(idx)) {
-anomalyIndices.push(idx);
+anomalyIndices.push(idx); // Spike or dip anomaly
 timeSeriesData[idx] += (Math.random() > 0.5 ? 1 : -1) * (15 + Math.random() * 20);
 }
 }
@@ -123,6 +123,7 @@ function runDetection() {
 const method = document.getElementById('method').value;
 let detected = [];
 let precision, recall, f1;
+// Simulate different detection capabilities
 const capabilities = {
 'ramses': { detected: 0.92, noise: 0.05, desc: 'RAMSeS combines both branches for best results!' },
 'ensemble': { detected: 0.85, noise: 0.12, desc: 'Stacking Ensemble with GA optimization.' },
@@ -130,7 +131,8 @@ const capabilities = {
 'baseline': { detected: 0.65, noise: 0.25, desc: 'Single model baseline - limited adaptability.' }
 };
 const cap = capabilities[method];
-anomalyIndices.forEach(idx => {
+// Simulate detection
+            anomalyIndices.forEach(idx => {
 if (Math.random() < cap.detected) detected.push(idx);
 });
 for (let i = 0; i < timeSeriesData.length; i++) {
