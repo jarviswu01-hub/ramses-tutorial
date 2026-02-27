@@ -84,23 +84,89 @@ function imageToBrailleDots(string $imagePath, int $maxWidth = 80, float $thresh
 }
 
 // ────────────────────────────────────────────────
-// USAGE
+// Upload Form UI
 // ────────────────────────────────────────────────
-if (php_sapi_name() === 'cli' && isset($argv[1])) {
-    // Command line usage: php dots.php photo.jpg [width] [threshold]
-    $file = $argv[1];
-    $width = isset($argv[2]) ? (int)$argv[2] : 80;
-    $thresh = isset($argv[3]) ? (float)$argv[3] : 0.5;
-    $result = imageToBrailleDots($file, $width, $thresh);
-    echo $result . "\n";
-} else {
-    // Web usage example
-    header('Content-Type: text/plain; charset=utf-8');
-    
-    // Change this path to your image
-    $photo = 'example.jpg';
-    
-    echo imageToBrailleDots($photo, 90, 0.48);
-    // Try threshold between 0.35 – 0.65 depending on your photo
-    // Smaller width = smaller message size
-}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo to Braille Dots</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        form {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        input[type="file"] {
+            padding: 10px;
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            margin-right: 10px;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        .result {
+            background: #1a1a2e;
+            color: #00ff88;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            white-space: pre;
+            font-family: monospace;
+            font-size: 10px;
+            line-height: 1;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📷 Photo → Braille Dots</h1>
+        
+        <?php if ($_FILES['photo'] ?? false): ?>
+            <?php 
+            $tmp = $_FILES['photo']['tmp_name'];
+            $result = imageToBrailleDots($tmp, 80, 0.5);
+            ?>
+            <div class="result"><?= htmlspecialchars($result) ?></div>
+        <?php endif; ?>
+        
+        <form method="post" enctype="multipart/form-data">
+            <input type="file" name="photo" accept="image/*">
+            <button type="submit">Convert to dots</button>
+        </form>
+    </div>
+</body>
+</html>
